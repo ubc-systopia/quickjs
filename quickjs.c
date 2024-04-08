@@ -46,6 +46,15 @@
 #include "libregexp.h"
 #include "libbf.h"
 
+#ifdef LLCT_INST
+#include <stdint.h>
+#include <sys/stat.h>
+#include <sched.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <x86intrin.h>
+#endif
+
 #define OPTIMIZE         1
 #define SHORT_OPCODES    1
 #if defined(EMSCRIPTEN)
@@ -16132,6 +16141,69 @@ typedef enum {
 #define FUNC_RET_YIELD_STAR    2
 #define FUNC_RET_INITIAL_YIELD 3
 
+
+#ifdef LLCT_INST
+void* quickjs_dispatch_table[256];
+#endif
+
+
+#ifdef LLCT_GRTH
+#define GTRUTH_ARR_SIZE (1<<22)
+static uint32_t gtruth_index = 0;
+static uint64_t gtruth_records[GTRUTH_ARR_SIZE][2];
+
+void js_std_reset_ground_truth(){
+    memset(gtruth_records, 0, sizeof(gtruth_records));
+    gtruth_index = 0;
+}
+
+void js_std_dump_record(const char* filename){
+    // PROG (dump timestamp);
+    FILE* fp;
+    fp = fopen(filename, "wb");
+    for(int i=0;i<gtruth_index;++i){
+        fprintf(fp, "%lu:%lu\n", gtruth_records[i][0], gtruth_records[i][1]);
+    }
+    fclose(fp);
+}
+
+static void wrmsr_IBPB(uint32_t reg, const char* regvals) {
+    uint64_t data;
+    int fd;
+    char msr_file_name[64];
+    uint32_t cpu;
+    getcpu(&cpu, NULL);
+
+    sprintf(msr_file_name, "/dev/cpu/%d/msr", cpu);
+    fd = open(msr_file_name, O_WRONLY);
+    if (fd < 0) {
+           if (errno == ENXIO) {
+               printf("wrmsr: No CPU %d\n", cpu);
+           } else if (errno == EIO) {
+               printf("wrmsr: CPU %d doesn't support MSRs\n", cpu);
+           } else {
+               printf("wrmsr: open\n");
+           }
+    }
+
+    data = strtoull(regvals, NULL, 0);
+    if (pwrite(fd, &data, sizeof data, reg) != sizeof data) {
+        if (errno == EIO) {
+            printf(
+                "wrmsr: CPU %d cannot set MSR "
+                "0x%08x to 0x%016lx\n",
+                cpu, reg, data);
+        } else {
+            printf("wrmsr: pwrite\n");
+        }
+    }
+
+    close(fd);
+
+    return;
+}
+#endif
+
 /* argv[] is modified if (flags & JS_CALL_FLAG_COPY_ARGV) = 0. */
 static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
                                JSValueConst this_obj, JSValueConst new_target,
@@ -16164,7 +16236,24 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
 #include "quickjs-opcode.h"
         [ OP_COUNT ... 255 ] = &&case_default
     };
+#ifdef LLCT_INST
+    memcpy(quickjs_dispatch_table, dispatch_table, sizeof(dispatch_table));
+#endif
+#if LLCT_GRTH
+    uint32_t aux;
+#define SWITCH(PC) {                                                \
+        opcode = *pc;                                               \
+        if( opcode == OP_goto8 ){                                   \
+            gtruth_records[gtruth_index][0] = __rdtscp(&aux);       \
+            gtruth_records[gtruth_index++][1] = OP_goto8;           \
+            if( gtruth_index ==GTRUTH_ARR_SIZE ) gtruth_index = 0;  \
+        }                                                           \
+        ++pc;                                                       \
+        goto *dispatch_table[opcode];                               \
+}
+#else
 #define SWITCH(pc)      goto *dispatch_table[opcode = *pc++];
+#endif
 #define CASE(op)        case_ ## op
 #define DEFAULT         case_default
 #define BREAK           SWITCH(pc)

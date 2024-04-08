@@ -143,6 +143,7 @@ ifdef CONFIG_WIN32
 DEFINES+=-D__USE_MINGW_ANSI_STDIO # for standard snprintf behavior
 endif
 
+CFLAGS+=-fPIC
 CFLAGS+=$(DEFINES)
 CFLAGS_DEBUG=$(CFLAGS) -O0
 CFLAGS_SMALL=$(CFLAGS) -Os
@@ -186,7 +187,7 @@ CONFIG_SHARED_LIBS=y # building shared libraries is supported
 endif
 endif
 
-PROGS=qjs$(EXE) qjsc$(EXE) run-test262
+PROGS=qjs$(EXE) qjsc$(EXE) qjs-llct$(EXE) qjs-debug$(EXE) run-test262
 ifneq ($(CROSS_PREFIX),)
 QJSC_CC=gcc
 QJSC=./host-qjsc
@@ -220,13 +221,30 @@ endif
 endif
 endif
 
-all: $(OBJDIR) $(OBJDIR)/quickjs.check.o $(OBJDIR)/qjs.check.o $(PROGS)
+all: $(OBJDIR) $(OBJDIR)/quickjs.check.o $(OBJDIR)/qjs.check.o $(PROGS) libquickjs.so libquickjs-grth.so
 
 QJS_LIB_OBJS=$(OBJDIR)/quickjs.o $(OBJDIR)/libregexp.o $(OBJDIR)/libunicode.o $(OBJDIR)/cutils.o $(OBJDIR)/quickjs-libc.o $(OBJDIR)/libbf.o
 
 QJS_OBJS=$(OBJDIR)/qjs.o $(OBJDIR)/repl.o $(QJS_LIB_OBJS)
+
+OBJLLCTDIR=$(OBJDIR)/llct
+QJS_LIB_LLCT_OBJS=$(OBJLLCTDIR)/quickjs.o $(OBJLLCTDIR)/libregexp.o $(OBJLLCTDIR)/libunicode.o $(OBJLLCTDIR)/cutils.o $(OBJLLCTDIR)/quickjs-libc.o $(OBJLLCTDIR)/libbf.o
+QJS_LLCT_OBJS=$(OBJDIR)/llct/qjs.o $(OBJDIR)/repl.o $(QJS_LIB_LLCT_OBJS)
+
+OBJ_GRTH_DIR=$(OBJDIR)/grth
+QJS_LIB_GRTH_OBJS=$(OBJ_GRTH_DIR)/quickjs.o $(OBJ_GRTH_DIR)/libregexp.o $(OBJ_GRTH_DIR)/libunicode.o $(OBJ_GRTH_DIR)/cutils.o $(OBJ_GRTH_DIR)/quickjs-libc.o $(OBJ_GRTH_DIR)/libbf.o
+QJS_GRTH_OBJS=$(OBJDIR)/grth/qjs.o $(OBJDIR)/repl.o $(QJS_LIB_GRTH_OBJS)
+
+
+OBJ_DBG_DIR=$(OBJDIR)/debug
+QJS_LIB_DEBUG_OBJS=$(OBJ_DBG_DIR)/quickjs.o $(OBJ_DBG_DIR)/libregexp.o $(OBJ_DBG_DIR)/libunicode.o $(OBJ_DBG_DIR)/cutils.o $(OBJ_DBG_DIR)/quickjs-libc.o $(OBJ_DBG_DIR)/libbf.o
+QJS_DBG_OBJS=$(OBJDIR)/qjs.o $(OBJDIR)/repl.o $(QJS_LIB_DEBUG_OBJS)
+
 ifdef CONFIG_BIGNUM
 QJS_OBJS+=$(OBJDIR)/qjscalc.o
+QJS_LLCT_OBJS+=$(OBJLLCTDIR)/qjscalc.o
+QJS_GRTH_OBJS+=$(OBJ_GRTH_DIR)/qjscalc.o
+QJS_DBG_OBJS+=$(OBJ_DBG_DIR)/qjscalc.o
 endif
 
 HOST_LIBS=-lm -ldl -lpthread
@@ -236,11 +254,24 @@ LIBS+=-ldl -lpthread
 endif
 LIBS+=$(EXTRA_LIBS)
 
+LLCTFLAGS = -DLLCT_INST
+LLCT_GRTH_FLAGS = -DLLCT_INST -DLLCT_GRTH
+DBGFLAGS = -DDUMP_BYTECODE=17
+
 $(OBJDIR):
-	mkdir -p $(OBJDIR) $(OBJDIR)/examples $(OBJDIR)/tests
+	mkdir -p $(OBJDIR) $(OBJDIR)/examples $(OBJDIR)/tests $(OBJLLCTDIR) $(OBJ_GRTH_DIR) $(OBJ_DBG_DIR)
 
 qjs$(EXE): $(QJS_OBJS)
 	$(CC) $(LDFLAGS) $(LDEXPORT) -o $@ $^ $(LIBS)
+
+qjs-llct$(EXE): $(QJS_LLCT_OBJS)
+	$(CC) $(LLCTFLAGS) $(LDFLAGS) $(LDEXPORT) -o $@ $^ $(LIBS)
+
+libquickjs.so: $(QJS_LLCT_OBJS)
+	$(CC) $(LLCTFLAGS) $(LDFLAGS) -shared -fPIC -o $@ $^ $(LIBS)
+
+libquickjs-grth.so: $(QJS_GRTH_OBJS)
+	$(CC) $(LLCT_GRTH_FLAGS) $(LDFLAGS) -shared -fPIC -o $@ $^ $(LIBS)
 
 qjs-debug$(EXE): $(patsubst %.o, %.debug.o, $(QJS_OBJS))
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
@@ -317,6 +348,15 @@ run-test262-32: $(patsubst %.o, %.m32.o, $(OBJDIR)/run-test262.o $(QJS_LIB_OBJS)
 $(OBJDIR)/%.o: %.c | $(OBJDIR)
 	$(CC) $(CFLAGS_OPT) -c -o $@ $<
 
+$(OBJDIR)/llct/%.o: %.c | $(OBJDIR)
+	$(CC) $(LLCTFLAGS) $(CFLAGS_OPT) -c -o $@ $<
+
+$(OBJDIR)/grth/%.o: %.c | $(OBJDIR)
+	$(CC) $(LLCT_GRTH_FLAGS) $(CFLAGS_OPT) -c -o $@ $<
+
+$(OBJDIR)/debug/%.o: %.c | $(OBJDIR)
+	$(CC) $(DBGFLAGS) $(CFLAGS_OPT) -c -o $@ $<
+
 $(OBJDIR)/%.host.o: %.c | $(OBJDIR)
 	$(HOST_CC) $(CFLAGS_OPT) -c -o $@ $<
 
@@ -346,7 +386,7 @@ unicode_gen: $(OBJDIR)/unicode_gen.host.o $(OBJDIR)/cutils.host.o libunicode.c u
 
 clean:
 	rm -f repl.c qjscalc.c out.c
-	rm -f *.a *.o *.d *~ unicode_gen regexp_test $(PROGS)
+	rm -f *.a *.o *.so *.d *~ unicode_gen regexp_test $(PROGS)
 	rm -f hello.c test_fib.c
 	rm -f examples/*.so tests/*.so
 	rm -rf $(OBJDIR)/ *.dSYM/ qjs-debug
@@ -355,11 +395,13 @@ clean:
 
 install: all
 	mkdir -p "$(DESTDIR)$(PREFIX)/bin"
-	$(STRIP) qjs$(EXE) qjsc$(EXE)
+	$(STRIP) qjs$(EXE) qjsc$(EXE) qjs-llct$(EXE)
 	install -m755 qjs$(EXE) qjsc$(EXE) "$(DESTDIR)$(PREFIX)/bin"
 	ln -sf qjs$(EXE) "$(DESTDIR)$(PREFIX)/bin/qjscalc$(EXE)"
 	mkdir -p "$(DESTDIR)$(PREFIX)/lib/quickjs"
 	install -m644 libquickjs.a "$(DESTDIR)$(PREFIX)/lib/quickjs"
+	install -m644 libquickjs.so "$(DESTDIR)$(PREFIX)/lib/quickjs"
+	install -m644 libquickjs-grth.so "$(DESTDIR)$(PREFIX)/lib/quickjs"
 ifdef CONFIG_LTO
 	install -m644 libquickjs.lto.a "$(DESTDIR)$(PREFIX)/lib/quickjs"
 endif
@@ -403,10 +445,10 @@ examples/test_fib: $(OBJDIR)/test_fib.o $(OBJDIR)/examples/fib.o libquickjs$(LTO
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 examples/fib.so: $(OBJDIR)/examples/fib.pic.o
-	$(CC) $(LDFLAGS) -shared -o $@ $^
+	$(CC) $(LDFLAGS) -shared -fPIC -o $@ $^
 
 examples/point.so: $(OBJDIR)/examples/point.pic.o
-	$(CC) $(LDFLAGS) -shared -o $@ $^
+	$(CC) $(LDFLAGS) -shared -fPIC -o $@ $^
 
 ###############################################################################
 # documentation
@@ -545,7 +587,7 @@ node-bench-v8:
 	node --jitless tests/bench-v8/combined.js
 
 tests/bjson.so: $(OBJDIR)/tests/bjson.pic.o
-	$(CC) $(LDFLAGS) -shared -o $@ $^ $(LIBS)
+	$(CC) $(LDFLAGS) -shared -fPIC -o $@ $^ $(LIBS)
 
 BENCHMARKDIR=../quickjs-benchmarks
 
