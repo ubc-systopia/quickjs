@@ -1159,6 +1159,12 @@ void JS_PrintValue(JSContext *ctx, JSPrintValueWrite *write_func, void *write_op
 #undef js_unlikely
 #undef js_force_inline
 
+#define ENABLE_INSTR 1
+
+#ifdef ENABLE_INSTR
+extern void *quickjs_opcode_targets[256];
+#endif
+
 #ifdef __cplusplus
 } /* extern "C" { */
 #endif
