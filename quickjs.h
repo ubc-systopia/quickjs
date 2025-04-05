@@ -1163,6 +1163,7 @@ void JS_PrintValue(JSContext *ctx, JSPrintValueWrite *write_func, void *write_op
 
 #ifdef ENABLE_INSTR
 extern void *quickjs_opcode_targets[256];
+extern const char *quickjs_opcode_target_names[256];
 #endif
 
 #ifdef __cplusplus

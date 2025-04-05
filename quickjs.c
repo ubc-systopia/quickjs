@@ -16704,6 +16704,18 @@ extern void
     *case_default;
 #undef DEF
 
+#define DEF(id, size, n_pop, n_push, f) "OP_" # id,
+#if SHORT_OPCODES
+#define def(id, size, n_pop, n_push, f)
+#else
+#define def(id, size, n_pop, n_push, f) &case_default,
+#endif
+const char *quickjs_opcode_target_names[256] = {
+#include "quickjs-opcode.h"
+    "OP_default"
+};
+#undef DEF
+
 #define DEF(id, size, n_pop, n_push, f) &case_OP_ ## id,
 #if SHORT_OPCODES
 #define def(id, size, n_pop, n_push, f)
