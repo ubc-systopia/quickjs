@@ -549,3 +549,7 @@ int main(int argc, char **argv)
     JS_FreeRuntime(rt);
     return 1;
 }
+
+int js_std_eval_file(JSContext *ctx, const char *filename, int module) {
+    return eval_file(ctx, filename, module);
+}
