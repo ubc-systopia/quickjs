@@ -1159,9 +1159,11 @@ void JS_PrintValue(JSContext *ctx, JSPrintValueWrite *write_func, void *write_op
 #undef js_unlikely
 #undef js_force_inline
 
-#define ENABLE_INSTR 1
+#if defined(ENABLE_HANDLER_EXPORT) && defined(__APPLE__)
+#undef ENABLE_HANDLER_EXPORT
+#endif
 
-#ifdef ENABLE_INSTR
+#if ENABLE_HANDLER_EXPORT
 extern void *quickjs_opcode_targets[256];
 extern const char *quickjs_opcode_target_names[256];
 #endif

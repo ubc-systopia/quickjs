@@ -16697,7 +16697,7 @@ typedef enum {
 #define FUNC_RET_YIELD_STAR    2
 #define FUNC_RET_INITIAL_YIELD 3
 
-#if DIRECT_DISPATCH && ENABLE_INSTR
+#if DIRECT_DISPATCH && ENABLE_HANDLER_EXPORT
 #define DEF(id, size, n_pop, n_push, f) *case_OP_ ## id,
 extern void
 #include "quickjs-opcode.h"
@@ -17295,7 +17295,7 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
                 goto exception;
             }
             BREAK;
-        CASE(OP_init_ctor):
+        CASE(OP_init_ctor)
             {
                 JSValue super, ret;
                 sf->cur_pc = pc;
@@ -18384,7 +18384,7 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
             }
             BREAK;
 
-        CASE(OP_get_array_el3):
+        CASE(OP_get_array_el3)
             {
                 JSValue val;
 
