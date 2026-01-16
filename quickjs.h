@@ -1159,8 +1159,13 @@ void JS_PrintValue(JSContext *ctx, JSPrintValueWrite *write_func, void *write_op
 #undef js_unlikely
 #undef js_force_inline
 
+#ifndef ENABLE_HANDLER_EXPORT
+#define ENABLE_HANDLER_EXPORT 1
+#endif
+
 #if defined(ENABLE_HANDLER_EXPORT) && defined(__APPLE__)
 #undef ENABLE_HANDLER_EXPORT
+#define ENABLE_HANDLER_EXPORT 0
 #endif
 
 #if ENABLE_HANDLER_EXPORT
