@@ -1,4 +1,5 @@
 *.a
+*.so
 .obj/
 tests/bjson.so
 examples/test_fib
@@ -9,6 +10,8 @@ examples/hello_module
 hello.c
 microbench*.txt
 qjs
+qjs-debug
+qjs-llct
 qjsc
 qjscalc
 qjscalc.c
