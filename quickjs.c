@@ -16761,7 +16761,24 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
 #include "quickjs-opcode.h"
         [ OP_COUNT ... 255 ] = &&case_default
     };
-#define SWITCH(pc)      goto *dispatch_table[opcode = *pc++];
+#define SWITCH(pc)  do { \
+                        JSAtom dbg_func_name = b->func_name; \
+                        const char *dbg_func_str = JS_AtomToCString(ctx, dbg_func_name); \
+                        \
+                        JSAtom dbg_file_name = b->debug.filename; \
+                        const char *dbg_file_str = JS_AtomToCString(ctx, dbg_file_name); \
+                        \
+                        int col_num1; \ 
+                        const int line_num = find_line_num(ctx, b, sf->cur_pc - b->byte_code_buf - 1, &col_num1);\
+                        \
+                        printf("Executing in %s [%s] | Opcode: %d | Line: %d\n", \
+                            dbg_func_str ? dbg_func_str : "<anonymous>", \
+                            dbg_file_str ? dbg_file_str : "<unknown>", \
+                            *pc, line_num); \
+                        \
+                        if (dbg_func_str) JS_FreeCString(ctx, dbg_func_str); \
+                        goto *dispatch_table[opcode = *pc++];\
+                    } while (0);
 #define CASE(op)        case_ ## op: __asm("case_" # op ":");
 #define DEFAULT         case_default
 #define BREAK           SWITCH(pc)
