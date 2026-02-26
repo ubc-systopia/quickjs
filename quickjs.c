@@ -16729,6 +16729,8 @@ void *quickjs_opcode_targets[256] = {
 #undef DEF
 #endif
 
+int PinSourceInfo(const uint16_t col, const uint64_t line, uint64_t sourceFile) { return (int) (col + line + sourceFile + 42); }
+
 /* argv[] is modified if (flags & JS_CALL_FLAG_COPY_ARGV) = 0. */
 static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
                                JSValueConst this_obj, JSValueConst new_target,
@@ -16761,24 +16763,20 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
 #include "quickjs-opcode.h"
         [ OP_COUNT ... 255 ] = &&case_default
     };
+
+// TODO: export debug file name instead of just JSAtom
+// const char *dbg_file_str = JS_AtomToCString(ctx, dbg_file_name); \
+
 #define SWITCH(pc)  do { \
-                        JSAtom dbg_func_name = b->func_name; \
-                        const char *dbg_func_str = JS_AtomToCString(ctx, dbg_func_name); \
-                        \
                         JSAtom dbg_file_name = b->debug.filename; \
-                        const char *dbg_file_str = JS_AtomToCString(ctx, dbg_file_name); \
                         \
-                        int col_num1; \ 
-                        const int line_num = find_line_num(ctx, b, sf->cur_pc - b->byte_code_buf - 1, &col_num1);\
+                        int col_num; \ 
+                        const int line_num = find_line_num(ctx, b, sf->cur_pc - b->byte_code_buf - 1, &col_num);\
                         \
-                        printf("Executing in %s [%s] | Opcode: %d | Line: %d\n", \
-                            dbg_func_str ? dbg_func_str : "<anonymous>", \
-                            dbg_file_str ? dbg_file_str : "<unknown>", \
-                            *pc, line_num); \
-                        \
-                        if (dbg_func_str) JS_FreeCString(ctx, dbg_func_str); \
+                        PinSourceInfo((uint16_t) col_num, line_num, dbg_file_name); \
                         goto *dispatch_table[opcode = *pc++];\
                     } while (0);
+
 #define CASE(op)        case_ ## op: __asm("case_" # op ":");
 #define DEFAULT         case_default
 #define BREAK           SWITCH(pc)
