@@ -16729,7 +16729,7 @@ void *quickjs_opcode_targets[256] = {
 #undef DEF
 #endif
 
-int PinSourceInfo(const uint16_t col, const uint64_t line, uint64_t sourceFile) { return (int) (col + line + sourceFile + 42); }
+int PinSourceInfo(const uint16_t col, const uint64_t line, uint64_t sourceAtom, char* sourceName) { return (int) (col + line + sourceAtom + (int) sourceName[0] + 42); }
 
 /* argv[] is modified if (flags & JS_CALL_FLAG_COPY_ARGV) = 0. */
 static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
@@ -16764,16 +16764,16 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
         [ OP_COUNT ... 255 ] = &&case_default
     };
 
-// TODO: export debug file name instead of just JSAtom
-// const char *dbg_file_str = JS_AtomToCString(ctx, dbg_file_name); \
 
 #define SWITCH(pc)  do { \
-                        JSAtom dbg_file_name = b->debug.filename; \
+                        JSAtom dbg_file_atom = b->debug.filename; \
+                        const char *dbg_file_str = JS_AtomToCString(ctx, dbg_file_atom); \
                         \
                         int col_num; \ 
                         const int line_num = find_line_num(ctx, b, sf->cur_pc - b->byte_code_buf - 1, &col_num);\
                         \
-                        PinSourceInfo((uint16_t) col_num, line_num, dbg_file_name); \
+                        PinSourceInfo((uint16_t) col_num, line_num, dbg_file_atom, dbg_file_str); \
+                        JS_FreeCString(ctx, dbg_file_str); \
                         goto *dispatch_table[opcode = *pc++];\
                     } while (0);
 
