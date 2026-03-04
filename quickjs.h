@@ -1177,6 +1177,6 @@ extern const char *quickjs_opcode_target_names[256];
 } /* extern "C" { */
 #endif
 
-extern int PinSourceInfo(const uint16_t col, const uint64_t line, uint64_t sourceAtom, char* sourceName);
+extern int PinSourceInfo(const uint16_t col, const uint64_t line, uint64_t sourceAtom, const char* sourceName);
 
 #endif /* QUICKJS_H */
