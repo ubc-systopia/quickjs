@@ -1159,18 +1159,11 @@ void JS_PrintValue(JSContext *ctx, JSPrintValueWrite *write_func, void *write_op
 #undef js_unlikely
 #undef js_force_inline
 
-#ifndef ENABLE_HANDLER_EXPORT
-#define ENABLE_HANDLER_EXPORT 1
-#endif
-
-#if defined(ENABLE_HANDLER_EXPORT) && defined(__APPLE__)
-#undef ENABLE_HANDLER_EXPORT
-#define ENABLE_HANDLER_EXPORT 0
-#endif
-
-#if ENABLE_HANDLER_EXPORT
-extern void *quickjs_opcode_targets[256];
-extern const char *quickjs_opcode_target_names[256];
+#ifdef MWRT
+#include "PinTracer/FilterEntry.h"
+extern int PinNotifyFilterAdd(FilterEntry *addr);
+extern int PinNotifyFilterRemove(FilterType type, uintptr_t origin, uintptr_t target);
+extern int PinNotifyAlias(uintptr_t addr, char *name);
 #endif
 
 #ifdef __cplusplus

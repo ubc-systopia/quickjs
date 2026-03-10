@@ -1675,6 +1675,17 @@ static void *js_def_malloc(JSMallocState *s, size_t size)
 
     s->malloc_count++;
     s->malloc_size += js_def_malloc_usable_size(ptr) + MALLOC_OVERHEAD;
+
+#ifdef MWRT
+    PinNotifyFilterAdd(&(FilterEntry){
+        .type = FilterTypeWhiteList | FilterTypeDataAccess | FilterTypeRead | FilterTypeWrite,
+        .originStart = 0,
+        .originEnd = 0,
+        .targetStart = (uintptr_t)ptr,
+        .targetEnd = (uintptr_t)ptr + size,
+    });
+#endif
+
     return ptr;
 }
 
@@ -1685,6 +1696,11 @@ static void js_def_free(JSMallocState *s, void *ptr)
 
     s->malloc_count--;
     s->malloc_size -= js_def_malloc_usable_size(ptr) + MALLOC_OVERHEAD;
+
+    #ifdef MWRT
+        PinNotifyFilterRemove(FilterTypeDataAccess, 0, (uintptr_t)ptr);
+    #endif
+
     free(ptr);
 }
 
@@ -1707,12 +1723,26 @@ static void *js_def_realloc(JSMallocState *s, void *ptr, size_t size)
     if (s->malloc_size + size - old_size > s->malloc_limit)
         return NULL;
 
-    ptr = realloc(ptr, size);
-    if (!ptr)
+#ifdef MWRT
+    PinNotifyFilterRemove(FilterTypeDataAccess, 0, (uintptr_t)ptr);
+#endif
+
+    void *nptr = realloc(ptr, size);
+    if (!nptr)
         return NULL;
 
-    s->malloc_size += js_def_malloc_usable_size(ptr) - old_size;
-    return ptr;
+#ifdef MWRT
+    PinNotifyFilterAdd(&(FilterEntry){
+        .type = FilterTypeWhiteList | FilterTypeDataAccess | FilterTypeRead | FilterTypeWrite,
+        .originStart = 0,
+        .originEnd = 0,
+        .targetStart = (uintptr_t)nptr,
+        .targetEnd = (uintptr_t)nptr + size,
+    });
+#endif
+
+    s->malloc_size += js_def_malloc_usable_size(nptr) - old_size;
+    return nptr;
 }
 
 static const JSMallocFunctions def_malloc_funcs = {
@@ -16697,36 +16727,11 @@ typedef enum {
 #define FUNC_RET_YIELD_STAR    2
 #define FUNC_RET_INITIAL_YIELD 3
 
-#if DIRECT_DISPATCH && ENABLE_HANDLER_EXPORT
-#define DEF(id, size, n_pop, n_push, f) *case_OP_ ## id,
-extern void
-#include "quickjs-opcode.h"
-    *case_default;
-#undef DEF
-
-#define DEF(id, size, n_pop, n_push, f) "OP_" # id,
-#if SHORT_OPCODES
-#define def(id, size, n_pop, n_push, f)
-#else
-#define def(id, size, n_pop, n_push, f) &case_default,
-#endif
-const char *quickjs_opcode_target_names[256] = {
-#include "quickjs-opcode.h"
-    "OP_default"
-};
-#undef DEF
-
-#define DEF(id, size, n_pop, n_push, f) &case_OP_ ## id,
-#if SHORT_OPCODES
-#define def(id, size, n_pop, n_push, f)
-#else
-#define def(id, size, n_pop, n_push, f) &case_default,
-#endif
-void *quickjs_opcode_targets[256] = {
-#include "quickjs-opcode.h"
-    &case_default
-};
-#undef DEF
+#ifdef MWRT
+static char *opcode_name(uint8_t opcode);
+int PinNotifyFilterAdd(FilterEntry *entry) { return 42 + (intptr_t) entry; }
+int PinNotifyFilterRemove(FilterType type, uintptr_t origin, uintptr_t target) { return 42 + type + origin + target; }
+int PinNotifyAlias(uintptr_t addr, char *name) { return 42 + addr + (intptr_t) name; }
 #endif
 
 /* argv[] is modified if (flags & JS_CALL_FLAG_COPY_ARGV) = 0. */
@@ -16790,7 +16795,7 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
             if (s->throw_flag)
                 goto exception;
             else
-                goto restart;
+                goto init;
         } else {
             goto not_a_function;
         }
@@ -16849,6 +16854,46 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
     sf->prev_frame = rt->current_stack_frame;
     rt->current_stack_frame = sf;
     ctx = b->realm; /* set the current realm */
+
+init:
+#ifdef MWRT
+    PinNotifyFilterRemove(FilterTypeDataAccess, 0, (uintptr_t)(dispatch_table));
+    for (int i = 0; i < OP_COUNT; i++) {
+        PinNotifyFilterRemove(FilterTypeControlFlow, 0, (uintptr_t)dispatch_table[i]);
+    }
+
+    for (int i = 0; i < OP_COUNT; i++) {
+        PinNotifyFilterAdd(&(FilterEntry){
+            .type = FilterTypeWhiteList | FilterTypeControlFlow | FilterTypeJump,
+            .originStart = 0,
+            .originEnd = 0,
+            .targetStart = (uintptr_t)dispatch_table[i],
+            .targetEnd = (uintptr_t)dispatch_table[i],
+        });
+        PinNotifyAlias((uintptr_t)dispatch_table[i], opcode_name(i));
+    }
+    PinNotifyFilterAdd(&(FilterEntry){
+        .type = FilterTypeWhiteList | FilterTypeDataAccess | FilterTypeRead | FilterTypeWrite,
+        .originStart = 0,
+        .originEnd = 0,
+        .targetStart = (uintptr_t)(arg_buf),
+        .targetEnd = (uintptr_t)(arg_buf + b->arg_count),
+    });
+    PinNotifyFilterAdd(&(FilterEntry){
+        .type = FilterTypeWhiteList | FilterTypeDataAccess | FilterTypeRead | FilterTypeWrite,
+        .originStart = 0,
+        .originEnd = 0,
+        .targetStart = (uintptr_t)(var_buf),
+        .targetEnd = (uintptr_t)(var_buf + b->var_count + b->stack_size),
+    });
+    PinNotifyFilterAdd(&(FilterEntry){
+        .type = FilterTypeWhiteList | FilterTypeDataAccess | FilterTypeRead | FilterTypeWrite,
+        .originStart = 0,
+        .originEnd = 0,
+        .targetStart = (uintptr_t)(dispatch_table),
+        .targetEnd = (uintptr_t)(dispatch_table + OP_COUNT),
+    });
+#endif
 
  restart:
     for(;;) {
@@ -19374,6 +19419,16 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
             JS_FreeValue(ctx, *pval);
         }
     }
+
+#ifdef MWRT
+    PinNotifyFilterRemove(FilterTypeDataAccess, 0, (uintptr_t)(dispatch_table));
+    for (int i = 0; i < OP_COUNT; i++) {
+        PinNotifyFilterRemove(FilterTypeControlFlow, 0, (uintptr_t)dispatch_table[i]);
+    }
+    PinNotifyFilterRemove(FilterTypeDataAccess, 0, (uintptr_t)(arg_buf));
+    PinNotifyFilterRemove(FilterTypeDataAccess, 0, (uintptr_t)(var_buf));
+#endif
+
     rt->current_stack_frame = sf->prev_frame;
     return ret_val;
 }
@@ -20785,7 +20840,7 @@ typedef struct JSParseState {
 } JSParseState;
 
 typedef struct JSOpCode {
-#ifdef DUMP_BYTECODE
+#if defined(DUMP_BYTECODE) || defined (MWRT)
     const char *name;
 #endif
     uint8_t size; /* in bytes */
@@ -20798,7 +20853,7 @@ typedef struct JSOpCode {
 
 static const JSOpCode opcode_info[OP_COUNT + (OP_TEMP_END - OP_TEMP_START)] = {
 #define FMT(f)
-#ifdef DUMP_BYTECODE
+#if defined(DUMP_BYTECODE) || defined(MWRT)
 #define DEF(id, size, n_pop, n_push, f) { #id, size, n_pop, n_push, OP_FMT_ ## f },
 #else
 #define DEF(id, size, n_pop, n_push, f) { size, n_pop, n_push, OP_FMT_ ## f },
@@ -20818,6 +20873,12 @@ static const JSOpCode opcode_info[OP_COUNT + (OP_TEMP_END - OP_TEMP_START)] = {
                 (op) + (OP_TEMP_END - OP_TEMP_START) : (op)]
 #else
 #define short_opcode_info(op) opcode_info[op]
+#endif
+
+#ifdef MWRT
+char *opcode_name(uint8_t op) {
+    return (char *) short_opcode_info(op).name;
+}
 #endif
 
 static __exception int next_token(JSParseState *s);
