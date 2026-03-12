@@ -16734,7 +16734,7 @@ int PinNotifyFilterRemove(FilterType type, uintptr_t origin, uintptr_t target) {
 int PinNotifyAlias(uintptr_t addr, char *name) { return 42 + addr + (intptr_t) name; }
 #endif
 
-int PinSourceInfo(const uint16_t col, const uint64_t line, uint64_t sourceAtom, const char* sourceName) { return (int) (col + line + sourceAtom + (int) sourceName[0] + 42); }
+int PinNotifySourceInfo(const uint16_t col, const uint64_t line, uint64_t sourceAtom, const char* sourceName) { return (int) (col + line + sourceAtom + (int) sourceName[0] + 42); }
 
 /* argv[] is modified if (flags & JS_CALL_FLAG_COPY_ARGV) = 0. */
 static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
@@ -16777,7 +16777,7 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
                         int col_num; \
                         const int line_num = find_line_num(ctx, b, sf->cur_pc - b->byte_code_buf - 1, &col_num); \
                         \
-                        PinSourceInfo((uint16_t) col_num, line_num, dbg_file_atom, dbg_file_str); \
+                        PinNotifySourceInfo((uint16_t) col_num, line_num, dbg_file_atom, dbg_file_str); \
                         JS_FreeCString(ctx, dbg_file_str); \
                         goto *dispatch_table[opcode = *pc++]; \
                     } while (0);

@@ -1170,6 +1170,6 @@ extern int PinNotifyAlias(uintptr_t addr, char *name);
 } /* extern "C" { */
 #endif
 
-extern int PinSourceInfo(const uint16_t col, const uint64_t line, uint64_t sourceAtom, const char* sourceName);
+extern int PinNotifySourceInfo(const uint16_t col, const uint64_t line, uint64_t sourceAtom, const char* sourceName);
 
 #endif /* QUICKJS_H */
