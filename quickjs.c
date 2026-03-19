@@ -1698,7 +1698,7 @@ static void js_def_free(JSMallocState *s, void *ptr)
     s->malloc_size -= js_def_malloc_usable_size(ptr) + MALLOC_OVERHEAD;
 
     #ifdef MWRT
-        PinNotifyFilterRemove(FilterTypeDataAccess, 0, (uintptr_t)ptr);
+        PinNotifyFilterRemove(FilterTypeWhiteList | FilterTypeDataAccess, 0, (uintptr_t)ptr);
     #endif
 
     free(ptr);
@@ -1724,7 +1724,7 @@ static void *js_def_realloc(JSMallocState *s, void *ptr, size_t size)
         return NULL;
 
 #ifdef MWRT
-    PinNotifyFilterRemove(FilterTypeDataAccess, 0, (uintptr_t)ptr);
+    PinNotifyFilterRemove(FilterTypeWhiteList | FilterTypeDataAccess, 0, (uintptr_t)ptr);
 #endif
 
     void *nptr = realloc(ptr, size);
@@ -16773,16 +16773,14 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
 #define SWITCH(pc)  do { \
                         JSAtom dbg_file_atom = b->debug.filename; \
                         const char *dbg_file_str = JS_AtomToCString(ctx, dbg_file_atom); \
-                        \
                         int col_num; \
                         const int line_num = find_line_num(ctx, b, sf->cur_pc - b->byte_code_buf - 1, &col_num); \
-                        \
                         PinNotifySourceInfo((uint16_t) col_num, line_num, dbg_file_atom, dbg_file_str); \
                         JS_FreeCString(ctx, dbg_file_str); \
                         goto *dispatch_table[opcode = *pc++]; \
                     } while (0);
 
-#define CASE(op)        case_ ## op: __asm("case_" # op ":");
+#define CASE(op)        case_ ## op:
 #define DEFAULT         case_default
 #define BREAK           SWITCH(pc)
 #endif
@@ -16872,12 +16870,20 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
 
 init:
 #ifdef MWRT
-    PinNotifyFilterRemove(FilterTypeDataAccess, 0, (uintptr_t)(dispatch_table));
+    PinNotifyFilterRemove(FilterTypeWhiteList | FilterTypeDataAccess, 0, (uintptr_t)(dispatch_table));
     for (int i = 0; i < OP_COUNT; i++) {
-        PinNotifyFilterRemove(FilterTypeControlFlow, 0, (uintptr_t)dispatch_table[i]);
+        PinNotifyFilterRemove(FilterTypeWhiteList | FilterTypeControlFlow, 0, (uintptr_t)dispatch_table[i]);
     }
 
-    for (int i = 0; i < OP_COUNT; i++) {
+    PinNotifyFilterAdd(&(FilterEntry){
+        .type = FilterTypeWhiteList | FilterTypeControlFlow | FilterTypeJump,
+        .originStart = 0,
+        .originEnd = 0,
+        .targetStart = (uintptr_t)b->byte_code_buf,
+        .targetEnd = (uintptr_t)(b->byte_code_buf + b->byte_code_len),
+    });
+    for (int i = OP_COUNT; i > 0; i--) {
+        PinNotifyAlias((uintptr_t)dispatch_table[i], opcode_name(i));
         PinNotifyFilterAdd(&(FilterEntry){
             .type = FilterTypeWhiteList | FilterTypeControlFlow | FilterTypeJump,
             .originStart = 0,
@@ -16885,28 +16891,27 @@ init:
             .targetStart = (uintptr_t)dispatch_table[i],
             .targetEnd = (uintptr_t)dispatch_table[i],
         });
-        PinNotifyAlias((uintptr_t)dispatch_table[i], opcode_name(i));
     }
     PinNotifyFilterAdd(&(FilterEntry){
         .type = FilterTypeWhiteList | FilterTypeDataAccess | FilterTypeRead | FilterTypeWrite,
         .originStart = 0,
         .originEnd = 0,
         .targetStart = (uintptr_t)(arg_buf),
-        .targetEnd = (uintptr_t)(arg_buf + b->arg_count),
+        .targetEnd = (uintptr_t)(arg_buf) + (b->arg_count) * sizeof(JSValue),
     });
     PinNotifyFilterAdd(&(FilterEntry){
         .type = FilterTypeWhiteList | FilterTypeDataAccess | FilterTypeRead | FilterTypeWrite,
         .originStart = 0,
         .originEnd = 0,
         .targetStart = (uintptr_t)(var_buf),
-        .targetEnd = (uintptr_t)(var_buf + b->var_count + b->stack_size),
+        .targetEnd = (uintptr_t)(var_buf) + (b->var_count + b->stack_size) * sizeof(JSValue),
     });
     PinNotifyFilterAdd(&(FilterEntry){
         .type = FilterTypeWhiteList | FilterTypeDataAccess | FilterTypeRead | FilterTypeWrite,
         .originStart = 0,
         .originEnd = 0,
         .targetStart = (uintptr_t)(dispatch_table),
-        .targetEnd = (uintptr_t)(dispatch_table + OP_COUNT),
+        .targetEnd = (uintptr_t)(dispatch_table) + OP_COUNT * sizeof(void *),
     });
 #endif
 
@@ -19436,12 +19441,13 @@ init:
     }
 
 #ifdef MWRT
-    PinNotifyFilterRemove(FilterTypeDataAccess, 0, (uintptr_t)(dispatch_table));
+    PinNotifyFilterRemove(FilterTypeWhiteList | FilterTypeDataAccess, 0, (uintptr_t)(dispatch_table));
     for (int i = 0; i < OP_COUNT; i++) {
-        PinNotifyFilterRemove(FilterTypeControlFlow, 0, (uintptr_t)dispatch_table[i]);
+        PinNotifyFilterRemove(FilterTypeWhiteList | FilterTypeControlFlow, 0, (uintptr_t)dispatch_table[i]);
     }
-    PinNotifyFilterRemove(FilterTypeDataAccess, 0, (uintptr_t)(arg_buf));
-    PinNotifyFilterRemove(FilterTypeDataAccess, 0, (uintptr_t)(var_buf));
+    PinNotifyFilterRemove(FilterTypeWhiteList | FilterTypeDataAccess, 0, (uintptr_t)(arg_buf));
+    PinNotifyFilterRemove(FilterTypeWhiteList | FilterTypeDataAccess, 0, (uintptr_t)(var_buf));
+    PinNotifyFilterRemove(FilterTypeWhiteList | FilterTypeDataAccess, 0, (uintptr_t)(b->byte_code_buf));
 #endif
 
     rt->current_stack_frame = sf->prev_frame;
