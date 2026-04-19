@@ -47,6 +47,9 @@
 #include "libunicode.h"
 #include "dtoa.h"
 
+#define MWRT 1
+#define MWRT_DA 0
+
 #define OPTIMIZE         1
 #define SHORT_OPCODES    1
 #if defined(EMSCRIPTEN)
@@ -1676,11 +1679,7 @@ static void *js_def_malloc(JSMallocState *s, size_t size)
     s->malloc_count++;
     s->malloc_size += js_def_malloc_usable_size(ptr) + MALLOC_OVERHEAD;
 
-<<<<<<< HEAD
-#ifdef MWRT
-=======
 #if defined(MWRT) && defined(MWRT_DA)
->>>>>>> 0acf057 (Hide DA behind flags)
     PinNotifyFilterAdd(&(FilterEntry){
         .type = FilterTypeWhiteList | FilterTypeDataAccess | FilterTypeRead | FilterTypeWrite,
         .originStart = 0,
@@ -1702,11 +1701,7 @@ static void js_def_free(JSMallocState *s, void *ptr)
     s->malloc_size -= js_def_malloc_usable_size(ptr) + MALLOC_OVERHEAD;
 
     #ifdef MWRT
-<<<<<<< HEAD
-        PinNotifyFilterRemove(FilterTypeWhiteList | FilterTypeDataAccess, 0, (uintptr_t)ptr);
-=======
         PinNotifyFilterRemove(FilterTypeDataAccess, 0, (uintptr_t)ptr);
->>>>>>> 0acf057 (Hide DA behind flags)
     #endif
 
     free(ptr);
@@ -16741,11 +16736,8 @@ int PinNotifyFilterAdd(FilterEntry *entry) { return 42 + (intptr_t) entry; }
 int PinNotifyFilterRemove(FilterType type, uintptr_t origin, uintptr_t target) { return 42 + type + origin + target; }
 int PinNotifyAlias(uintptr_t addr, char *name) { return 42 + addr + (intptr_t) name; }
 #endif
-<<<<<<< HEAD
 
 int PinNotifySourceInfo(const uint16_t col, const uint64_t line, uint64_t sourceAtom, const char* sourceName) { return (int) (col + line + sourceAtom + (int) sourceName[0] + 42); }
-=======
->>>>>>> 0acf057 (Hide DA behind flags)
 
 /* argv[] is modified if (flags & JS_CALL_FLAG_COPY_ARGV) = 0. */
 static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
@@ -16779,24 +16771,27 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
 #include "quickjs-opcode.h"
         [ OP_COUNT ... 255 ] = &&case_default
     };
-<<<<<<< HEAD
 
-
+#ifdef MWRT
 #define SWITCH(pc)  do { \
                         JSAtom dbg_file_atom = b->debug.filename; \
                         const char *dbg_file_str = JS_AtomToCString(ctx, dbg_file_atom); \
                         int col_num; \
-                        const int line_num = find_line_num(ctx, b, sf->cur_pc - b->byte_code_buf - 1, &col_num); \
+                        const int line_num = find_line_num(ctx, b, pc - b->byte_code_buf, &col_num); \
                         PinNotifySourceInfo((uint16_t) col_num, line_num, dbg_file_atom, dbg_file_str); \
                         JS_FreeCString(ctx, dbg_file_str); \
                         goto *dispatch_table[opcode = *pc++]; \
                     } while (0);
-
-#define CASE(op)        case_ ## op:
-=======
+#else
 #define SWITCH(pc)      goto *dispatch_table[opcode = *pc++];
+#endif
+
+#ifdef MWRT_DA
+#define CASE(op)        case_ ## op:
+#else
 #define CASE(op)        case_ ## op: __asm("case_" # op ":");
->>>>>>> 0acf057 (Hide DA behind flags)
+#endif
+
 #define DEFAULT         case_default
 #define BREAK           SWITCH(pc)
 #endif
@@ -16886,29 +16881,12 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
 
 init:
 #ifdef MWRT
-<<<<<<< HEAD
-    PinNotifyFilterRemove(FilterTypeWhiteList | FilterTypeDataAccess, 0, (uintptr_t)(dispatch_table));
-    for (int i = 0; i < OP_COUNT; i++) {
-        PinNotifyFilterRemove(FilterTypeWhiteList | FilterTypeControlFlow, 0, (uintptr_t)dispatch_table[i]);
-    }
-
-    PinNotifyFilterAdd(&(FilterEntry){
-        .type = FilterTypeWhiteList | FilterTypeControlFlow | FilterTypeJump,
-        .originStart = 0,
-        .originEnd = 0,
-        .targetStart = (uintptr_t)b->byte_code_buf,
-        .targetEnd = (uintptr_t)(b->byte_code_buf + b->byte_code_len),
-    });
-    for (int i = OP_COUNT; i > 0; i--) {
-        PinNotifyAlias((uintptr_t)dispatch_table[i], opcode_name(i));
-=======
     PinNotifyFilterRemove(FilterTypeDataAccess, 0, (uintptr_t)(dispatch_table));
     for (int i = 0; i < OP_COUNT; i++) {
         PinNotifyFilterRemove(FilterTypeControlFlow, 0, (uintptr_t)dispatch_table[i]);
     }
 
     for (int i = 0; i < OP_COUNT; i++) {
->>>>>>> 0acf057 (Hide DA behind flags)
         PinNotifyFilterAdd(&(FilterEntry){
             .type = FilterTypeWhiteList | FilterTypeControlFlow | FilterTypeJump,
             .originStart = 0,
@@ -16916,51 +16894,33 @@ init:
             .targetStart = (uintptr_t)dispatch_table[i],
             .targetEnd = (uintptr_t)dispatch_table[i],
         });
-<<<<<<< HEAD
-    }
-=======
         PinNotifyAlias((uintptr_t)dispatch_table[i], opcode_name(i));
     }
 #endif
 
 #if defined(MWRT) && defined(MWRT_DA)
->>>>>>> 0acf057 (Hide DA behind flags)
     PinNotifyFilterAdd(&(FilterEntry){
         .type = FilterTypeWhiteList | FilterTypeDataAccess | FilterTypeRead | FilterTypeWrite,
         .originStart = 0,
         .originEnd = 0,
         .targetStart = (uintptr_t)(arg_buf),
-<<<<<<< HEAD
-        .targetEnd = (uintptr_t)(arg_buf) + (b->arg_count) * sizeof(JSValue),
-    });
-=======
         .targetEnd = (uintptr_t)(arg_buf + b->arg_count),
     });
     
->>>>>>> 0acf057 (Hide DA behind flags)
     PinNotifyFilterAdd(&(FilterEntry){
         .type = FilterTypeWhiteList | FilterTypeDataAccess | FilterTypeRead | FilterTypeWrite,
         .originStart = 0,
         .originEnd = 0,
         .targetStart = (uintptr_t)(var_buf),
-<<<<<<< HEAD
-        .targetEnd = (uintptr_t)(var_buf) + (b->var_count + b->stack_size) * sizeof(JSValue),
-    });
-=======
         .targetEnd = (uintptr_t)(var_buf + b->var_count + b->stack_size),
     });
     
->>>>>>> 0acf057 (Hide DA behind flags)
     PinNotifyFilterAdd(&(FilterEntry){
         .type = FilterTypeWhiteList | FilterTypeDataAccess | FilterTypeRead | FilterTypeWrite,
         .originStart = 0,
         .originEnd = 0,
         .targetStart = (uintptr_t)(dispatch_table),
-<<<<<<< HEAD
-        .targetEnd = (uintptr_t)(dispatch_table) + OP_COUNT * sizeof(void *),
-=======
         .targetEnd = (uintptr_t)(dispatch_table + OP_COUNT),
->>>>>>> 0acf057 (Hide DA behind flags)
     });
 #endif
 
@@ -19490,22 +19450,12 @@ init:
     }
 
 #ifdef MWRT
-<<<<<<< HEAD
-    PinNotifyFilterRemove(FilterTypeWhiteList | FilterTypeDataAccess, 0, (uintptr_t)(dispatch_table));
-    for (int i = 0; i < OP_COUNT; i++) {
-        PinNotifyFilterRemove(FilterTypeWhiteList | FilterTypeControlFlow, 0, (uintptr_t)dispatch_table[i]);
-    }
-    PinNotifyFilterRemove(FilterTypeWhiteList | FilterTypeDataAccess, 0, (uintptr_t)(arg_buf));
-    PinNotifyFilterRemove(FilterTypeWhiteList | FilterTypeDataAccess, 0, (uintptr_t)(var_buf));
-    PinNotifyFilterRemove(FilterTypeWhiteList | FilterTypeDataAccess, 0, (uintptr_t)(b->byte_code_buf));
-=======
     PinNotifyFilterRemove(FilterTypeDataAccess, 0, (uintptr_t)(dispatch_table));
     for (int i = 0; i < OP_COUNT; i++) {
         PinNotifyFilterRemove(FilterTypeControlFlow, 0, (uintptr_t)dispatch_table[i]);
     }
     PinNotifyFilterRemove(FilterTypeDataAccess, 0, (uintptr_t)(arg_buf));
     PinNotifyFilterRemove(FilterTypeDataAccess, 0, (uintptr_t)(var_buf));
->>>>>>> 0acf057 (Hide DA behind flags)
 #endif
 
     rt->current_stack_frame = sf->prev_frame;
