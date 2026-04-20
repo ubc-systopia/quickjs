@@ -47,9 +47,6 @@
 #include "libunicode.h"
 #include "dtoa.h"
 
-#define MWRT 1
-#define MWRT_DA 0
-
 #define OPTIMIZE         1
 #define SHORT_OPCODES    1
 #if defined(EMSCRIPTEN)
