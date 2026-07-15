@@ -3783,6 +3783,15 @@ JSModuleDef *js_init_module_os(JSContext *ctx, const char *module_name)
 
 /**********************************************************/
 
+static JSValue js_rdtscp(JSContext *ctx, JSValueConst this_val,
+                         int argc, JSValueConst *argv)
+{
+    uint32_t lo, hi;
+    __asm__ __volatile__("rdtscp" : "=a"(lo), "=d"(hi) : : "rcx");
+    uint64_t tsc = ((uint64_t)hi << 32) | lo;
+    return JS_NewBigUint64(ctx, tsc);
+}
+
 static JSValue js_print(JSContext *ctx, JSValueConst this_val,
                         int argc, JSValueConst *argv)
 {
@@ -3827,6 +3836,8 @@ void js_std_add_helpers(JSContext *ctx, int argc, char **argv)
 
     JS_SetPropertyStr(ctx, global_obj, "print",
                       JS_NewCFunction(ctx, js_print, "print", 1));
+    JS_SetPropertyStr(ctx, global_obj, "rdtscp",
+                      JS_NewCFunction(ctx, js_rdtscp, "rdtscp", 0));
     JS_SetPropertyStr(ctx, global_obj, "__loadScript",
                       JS_NewCFunction(ctx, js_loadScript, "__loadScript", 1));
 
